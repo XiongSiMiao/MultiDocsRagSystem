@@ -28,6 +28,7 @@ class ToolAgent:
         }
 
     def execute_sql_query(self, sql_query: str) -> str:
+
         """执行SQL查询并返回结果，按指定字符串格式"""
         connection = None
         try:
@@ -59,6 +60,7 @@ class ToolAgent:
         finally:
             if connection and connection.is_connected():
                 connection.close()
+    
     def execute_tool(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """执行具体的工具调用"""
         try:
@@ -128,56 +130,166 @@ class ToolAgent:
 
         return "\n".join(response_parts)
 
+    def execute_tool_call(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """根据工具名称和参数执行数据库或API工具调用，返回调用结果"""
+        if tool_name == '数据库':
+            # 执行数据库查询
+            sql_query = params if isinstance(params, str) else params.get('sql', '')
+            try:
+                query_result = self.execute_sql_query(sql_query)
+                # query_result = {'transaction_amount':1000}
+                return {'type': 'database', 'result': query_result, 'sql': sql_query}
+            except Exception as e:
+                return {'type': 'database', 'error': str(e), 'sql': sql_query}
+        else:
+            # 执行API工具调用
+            try:
+                tool_result = self.execute_tool(tool_name, params)
+                return {'type': 'api', 'tool_name': tool_name, 'result': tool_result, 'params': params}
+            except Exception as e:
+                return {'type': 'api', 'tool_name': tool_name, 'error': str(e), 'params': params}
+
+    def generate_result_description(self, tool_name: str, params: Dict[str, Any], result: Dict[str, Any]) -> str:
+        """根据工具调用结果生成描述文本"""
+        if 'error' in result:
+            return f"执行失败: {result['error']}"
+        
+        if tool_name == '数据库':
+            return f"数据库查询结果: {result.get('result', '无结果')}"
+        
+        # 根据不同的工具类型生成不同的描述
+        if tool_name == '水电煤服务':
+            usage = result.get('result', {}).get('usage', '未知')
+            return f"户号 {params.get('householdId')} 在 {params.get('month')} 的电使用量为 {usage} 度"
+        elif tool_name == '汇率服务':
+            rate = result.get('result', {}).get('exchangeRate', '未知')
+            converted = result.get('result', {}).get('convertedAmount', '未知')
+            return f"{params.get('amount', 1)} {params.get('fromCurrency')} 可兑换 {converted} {params.get('toCurrency')}，汇率为 {rate}"
+        elif tool_name == '计算器工具':
+            return f"计算结果: {result.get('result', {}).get('result', '未知')}"
+        elif tool_name == '获取当前日期工具':
+            return f"当前日期: {result.get('result', {}).get('current_date', '未知')}"
+        elif tool_name == '支付订单服务':
+            # 使用实际的API调用结果，而不是硬编码的值
+            if 'result' in result and result['result']:
+                order_id = result['result'].get('orderId', '未知')
+                return f"支付订单创建成功，订单ID: {order_id}, {result['result']}"
+            else:
+                return f"支付订单服务执行结果: {json.dumps(result.get('result', {}), ensure_ascii=False)}"
+        else:
+            return f"执行成功: {json.dumps(result.get('result', {}), ensure_ascii=False)}"
+
+    def generate_new_question_with_results(self, question: str, intent_result: Dict[str, Any]) -> str:
+        """根据意图识别结果执行工具调用，并生成包含结果的新问题描述"""
+        if not intent_result:
+            return f"原始问题: {question}"
+        
+        new_question_parts = [f"原始问题: {question}"]
+        
+        # 检查是否为工具依赖调用
+        if '工具依赖调用' in intent_result:
+            # 处理工具依赖调用
+            dependency_result = self.execute_tool_dependency_call(intent_result['工具依赖调用'])
+            new_question_parts.append(f"工具依赖调用执行结果:\n{dependency_result}")
+        else:
+            # 遍历意图识别结果，执行每个工具调用
+            for tool_name, params in intent_result.items():
+                # 执行工具调用
+                tool_call_result = self.execute_tool_call(tool_name, params)
+                
+                # 生成结果描述
+                result_desc = self.generate_result_description(tool_name, params, tool_call_result)
+                new_question_parts.append(f"{tool_name}执行结果: {result_desc}")
+        
+        # 生成新的问题描述
+        return "\n".join(new_question_parts)
+
+    def execute_tool_dependency_call(self, dependency_config: Dict[str, Any]) -> str:
+        """执行工具依赖调用，按顺序执行多个步骤并处理参数映射"""
+        if 'steps' not in dependency_config:
+            return "工具依赖调用配置错误：缺少steps字段"
+        
+        steps = dependency_config['steps']
+        step_results = {}
+        response_parts = []
+        
+        # 按顺序执行每个步骤
+        for i, step in enumerate(steps):
+            step_name = f"步骤{i+1}"
+            response_parts.append(f"{step_name}:")
+            
+            # 解析步骤配置
+            for tool_name, tool_config in step.items():
+                # 处理参数映射
+                resolved_params = self.resolve_param_mapping(tool_config, step_results)
+                
+                # 执行工具调用
+                result = self.execute_tool_call(tool_name, resolved_params)
+                
+                # 存储步骤结果
+                step_key = f"step{i+1}"
+                step_results[step_key] = result
+                
+                # 生成结果描述
+                description = self.generate_result_description(tool_name, resolved_params, result)
+                response_parts.append(f"  {description}")
+                
+                # 如果步骤执行失败，停止后续步骤
+                if 'error' in result:
+                    response_parts.append(f"  {step_name}执行失败，停止后续步骤")
+                    break
+        
+        return "\n".join(response_parts)
+
+    def resolve_param_mapping(self, tool_config: Any, step_results: Dict[str, Any]) -> Dict[str, Any]:
+        """解析参数映射，将param_mapping中的占位符替换为实际值"""
+        if not isinstance(tool_config, dict):
+            return tool_config
+        
+        resolved_config = tool_config.copy()
+        
+        # 检查是否有参数映射配置
+        if 'param_mapping' in resolved_config:
+            param_mapping = resolved_config.pop('param_mapping')
+            
+            # 解析每个映射关系
+            for target_param, source_path in param_mapping.items():
+                # 解析源路径，格式如：step1.result.transaction_amount
+                parts = source_path.split('.')
+                if len(parts) >= 2:
+                    step_key = parts[0]  # step1, step2等
+                    result_key = parts[1]  # result或error
+                    
+                    if step_key in step_results:
+                        step_result = step_results[step_key]
+                        
+                        # 获取实际值
+                        if result_key in step_result:
+                            value = step_result[result_key]
+                            
+                            # 如果是字典，可以继续深入获取
+                            if isinstance(value, dict) and len(parts) > 2:
+                                for key in parts[2:]:
+                                    if isinstance(value, dict) and key in value:
+                                        value = value[key]
+                                    else:
+                                        value = None
+                                        break
+                            
+                            # 设置解析后的参数值
+                            resolved_config[target_param] = value
+        
+        return resolved_config
+
     def execute_and_generate_new_question(self, question: str) -> tuple[Dict[str, Any], str]:
         """执行意图识别后的工具调用或数据库查询，并生成新的问题描述"""
         # 1. 意图识别
         intent_result = self.intent_recognizer.recognize_intent_by_api(question)
         
-        # 2. 如果是数据库查询，执行SQL并返回结果
-        if '数据库' in intent_result:
-            sql_query = intent_result['数据库']
-            query_result = self.execute_sql_query(sql_query)
-            print(f"执行SQL查询: {sql_query}")
-            new_question = f"原始问题: {question}\n数据库查询结果: {query_result}"
-            return intent_result, new_question
+        # 2. 生成包含结果的新问题描述
+        new_question = self.generate_new_question_with_results(question, intent_result)
         
-        # 3. 如果是API工具，执行工具调用
-        if intent_result:
-            tool_results = {}
-            new_question_parts = [f"原始问题: {question}"]
-            
-            for tool_name, params in intent_result.items():
-                # 执行工具调用
-                tool_result = self.execute_tool(tool_name, params)
-                tool_results[tool_name] = tool_result
-                
-                # 根据工具结果生成描述
-                if 'error' in tool_result:
-                    result_desc = f"执行失败: {tool_result['error']}"
-                else:
-                    # 根据不同的工具类型生成不同的描述
-                    if tool_name == '水电煤服务':
-                        usage = tool_result.get('usage', '未知')
-                        result_desc = f"户号 {params.get('householdId')} 在 {params.get('month')} 的电使用量为 {usage} 度"
-                    elif tool_name == '汇率服务':
-                        rate = tool_result.get('exchangeRate', '未知')
-                        converted = tool_result.get('convertedAmount', '未知')
-                        result_desc = f"{params.get('amount', 1)} {params.get('fromCurrency')} 可兑换 {converted} {params.get('toCurrency')}，汇率为 {rate}"
-                    elif tool_name == '计算器工具':
-                        result_desc = f"计算结果: {tool_result.get('result', '未知')}"
-                    elif tool_name == '获取当前日期工具':
-                        result_desc = f"当前日期: {tool_result.get('current_date', '未知')}"
-                    else:
-                        result_desc = f"执行成功: {json.dumps(tool_result, ensure_ascii=False)}"
-                
-                new_question_parts.append(f"{tool_name}执行结果: {result_desc}")
-            
-            # 生成新的问题描述
-            new_question = "\n".join(new_question_parts)
-            return intent_result, new_question
-        
-        # 4. 没有匹配到任何工具
-        return {}, f"原始问题: {question}"
+        return intent_result, new_question
 
     def process_question(self, question: str) -> Dict[str, Any]:
         """处理用户问题的主流程 - 返回意图识别结果或数据库查询结果"""
@@ -211,59 +323,60 @@ if __name__ == "__main__":
     test_questions = [
         "查询户号BJ001234568在2025-08的电使用量为多少度？",
 
-    "5000日元等于多少韩元？",
+        "5000日元等于多少韩元？",
 
-    "计算2的平方加上3的立方",
+        "计算2的平方加上3的立方",
 
-    "查询信用卡6211111111111111在2025-09的账单",
+        "查询信用卡6211111111111111在2025-09的账单",
 
-    "创建支付订单，商户号M123456，订单号ORD2025001，金额100.50元",
+        "创建支付订单，商户号M123456，订单号ORD2025001，金额100.50元",
 
-    "现在是什么日期？",
+        "现在是什么日期？",
 
-    "国通星驿2025年上半年净利润约为多少？",
+        "国通星驿2025年上半年净利润约为多少？",
 
-    "2025年9月18日起，民生银行信用卡中心将对哪项业务纳入信用卡资金受控金额？",
+        "2025年9月18日起，民生银行信用卡中心将对哪项业务纳入信用卡资金受控金额？",
 
-    "华夏银行定义的预借现金包括哪些具体形式？",
+        "华夏银行定义的预借现金包括哪些具体形式？",
 
-    "方舟投资旗下哪两只ETF在2025年9月22日买入了阿里巴巴ADR？",
+        "方舟投资旗下哪两只ETF在2025年9月22日买入了阿里巴巴ADR？",
 
-    "若企业希望转账仅由制单员完成，无需复核员参与，但超过特定金额需主管审批，应在设置转账流程时如何操作？",
+        "若企业希望转账仅由制单员完成，无需复核员参与，但超过特定金额需主管审批，应在设置转账流程时如何操作？",
 
-    "支付并签约（APP）交易中，交易子类txnSubType应填写为何值？",
+        "支付并签约（APP）交易中，交易子类txnSubType应填写为何值？",
 
-    "2035年阿里云全球数据中心的能耗规模将比2022年提升多少倍？",
+        "2035年阿里云全球数据中心的能耗规模将比2022年提升多少倍？",
 
-    "根据中国人民银行和文化和旅游部发布的《关于金融支持文化和旅游行业恢复发展的通知》，鼓励有条件的文化和旅游金融服务中心发起成立什么类型的基金？",
+        "根据中国人民银行和文化和旅游部发布的《关于金融支持文化和旅游行业恢复发展的通知》，鼓励有条件的文化和旅游金融服务中心发起成立什么类型的基金？",
 
-    "根据财联社2025年9月24日的报道，芯片产业链中有多少只股票涨停？",
+        "根据财联社2025年9月24日的报道，芯片产业链中有多少只股票涨停？",
 
-    "请查询机构名称为建设银行且交易类型为REFUND的最近2笔交易的交易ID和金额，以交易时间倒序排序。请通过数据查询方式获取结果，最终仅返回结果值",
+        "请查询机构名称为建设银行且交易类型为REFUND的最近2笔交易的交易ID和金额，以交易时间倒序排序。请通过数据查询方式获取结果，最终仅返回结果值",
 
-    "请查询交易时间在2024年1月之后的所有成功支付交易中交易金额最小的1笔交易的交易ID和金额。请通过数据查询方式获取结果，最终仅返回结果值",
+        "请查询交易时间在2024年1月之后的所有成功支付交易中交易金额最小的1笔交易的交易ID和金额。请通过数据查询方式获取结果，最终仅返回结果值",
 
-    "请查询商户名称第二个字为'三'的商户数量。请通过数据查询方式获取结果，最终仅返回结果值",
+        "请查询商户名称第二个字为'三'的商户数量。请通过数据查询方式获取结果，最终仅返回结果值",
 
-    "请查询所有成功交易的平均交易金额。请通过数据查询方式获取结果，最终仅返回结果值",
+        "请查询所有成功交易的平均交易金额。请通过数据查询方式获取结果，最终仅返回结果值",
 
-    "请查询每个商户类别码下成功交易的平均金额，并按平均金额从高到低排序，取最高4个类别。请通过数据查询方式获取结果，最终仅返回结果值",
+        "请查询每个商户类别码下成功交易的平均金额，并按平均金额从高到低排序，取最高4个类别。请通过数据查询方式获取结果，最终仅返回结果值",
 
-    "汇率转换：5000日元等于多少韩元",
+        "汇率转换：5000日元等于多少韩元",
 
-    "查询用户110101199003072845名下拥有的信用卡数量",
+        "查询用户110101199003072845名下拥有的信用卡数量",
 
-    "查询户号BJ001234568在2025-08的电使用量为多少度",
+        "查询户号BJ001234568在2025-08的电使用量为多少度",
 
-    "为商户M001047创建订单号为ORD002025147的支付订单，金额1850元，返回支付订单ID",
+        "为商户M001047创建订单号为ORD002025147的支付订单，金额1850元，返回支付订单ID",
 
-    "123456689的平方是多少",
+        "123456689的平方是多少",
 
-    "瑞银集团因法国税务历史遗留问题支付的总金额转换成人民币是多少元？（以当前汇率计算，保留两位小数）",
+        "瑞银集团因法国税务历史遗留问题支付的总金额转换成人民币是多少元？（以当前汇率计算，保留两位小数）",
 
-    "请查询交易类型为PAYMENT且交易金额大于500元的最近交易金额，以此为订单金额，为商户M222222创建订单号为ORD2025005的支付订单，返回支付订单ID"
+        "请查询交易类型为PAYMENT且交易金额大于500元的最近交易金额，以此为订单金额，为商户M222222创建订单号为ORD2025005的支付订单，返回支付订单ID"
     ]
-
+    test_questions =[ "请查询交易类型为PAYMENT且交易金额大于500元的最近交易金额，以此为订单金额，为商户M222222创建订单号为ORD2025005的支付订单，返回支付订单ID"
+    ]
     print("\n=== 测试执行工具并生成新问题 ===")
     for question in test_questions:
         print("=" * 50)

@@ -259,10 +259,10 @@ class IntentRecognizer:
                                 {"名称": "institution_id", "类型": "VARCHAR(32)", "说明": "发起机构/支付机构ID"},
                                 {"名称": "account_id", "类型": "VARCHAR(32)", "说明": "交易账户ID（付款方）"},
                                 {"名称": "counterparty_id", "类型": "VARCHAR(32)", "说明": "对手方账户ID（收款方）"},
-                                {"名称": "transaction_amount", "类型": "DECIMAL(15,2)", "说明": "交易金额（人民币）"},
-                                {"名称": "transaction_type", "类型": "VARCHAR(20)", "说明": "交易类型（PAYMENT/REFUND）"},
+                                {"名称": "transaction_amount", "类型": "DECIMAL(15,2)", "说明": "交易金额，单位：元，币种为人民币"},
+                                {"名称": "transaction_type", "类型": "VARCHAR(20)", "说明": "交易类型，如 PAYMENT, REFUND"},
                                 {"名称": "transaction_time", "类型": "DATETIME", "说明": "交易发生时间"},
-                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "交易状态"},
+                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "交易状态，如 SUCCESS, FAILED"},
                                 {"名称": "remark", "类型": "VARCHAR(255)", "说明": "交易备注"}
                             ]
                             },
@@ -272,12 +272,12 @@ class IntentRecognizer:
                             "字段": [
                                 {"名称": "institution_id", "类型": "VARCHAR(32)", "说明": "机构唯一标识"},
                                 {"名称": "institution_name", "类型": "VARCHAR(100)", "说明": "机构名称"},
-                                {"名称": "institution_type", "类型": "VARCHAR(20)", "说明": "机构类型（BANK/PAYMENT）"},
+                                {"名称": "institution_type", "类型": "VARCHAR(20)", "说明": "机构类型，如 BANK, PAYMENT"},
                                 {"名称": "license_no", "类型": "VARCHAR(50)", "说明": "金融许可证号"},
                                 {"名称": "legal_entity", "类型": "VARCHAR(100)", "说明": "法人代表"},
                                 {"名称": "contact_phone", "类型": "VARCHAR(20)", "说明": "联系电话"},
                                 {"名称": "contact_email", "类型": "VARCHAR(100)", "说明": "联系邮箱"},
-                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "机构状态"},
+                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "机构状态，如 ACTIVE"},
                                 {"名称": "create_time", "类型": "DATETIME", "说明": "创建时间"}
                             ]
                             },
@@ -287,17 +287,30 @@ class IntentRecognizer:
                             "字段": [
                                 {"名称": "merchant_id", "类型": "VARCHAR(32)", "说明": "商户唯一标识"},
                                 {"名称": "merchant_name", "类型": "VARCHAR(100)", "说明": "商户名称"},
-                                {"名称": "merchant_type", "类型": "VARCHAR(20)", "说明": "商户类型（RETAIL/ONLINE）"},
+                                {"名称": "merchant_type", "类型": "VARCHAR(20)", "说明": "商户类型，如 RETAIL, ONLINE"},
                                 {"名称": "merchant_category", "类型": "VARCHAR(10)", "说明": "商户类别码 MCC"},
                                 {"名称": "legal_person", "类型": "VARCHAR(50)", "说明": "法人姓名"},
                                 {"名称": "business_license", "类型": "VARCHAR(50)", "说明": "营业执照号"},
                                 {"名称": "settlement_account", "类型": "VARCHAR(32)", "说明": "结算账户ID"},
-                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "商户状态"},
+                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "商户状态，如 ACTIVE"},
                                 {"名称": "register_time", "类型": "DATETIME", "说明": "注册时间"}
+                            ]
+                            },
+                            {
+                            "表名": "account_info",
+                            "注释": "账户信息表",
+                            "字段": [
+                                {"名称": "account_id", "类型": "VARCHAR(32)", "说明": "账户唯一标识"},
+                                {"名称": "account_name", "类型": "VARCHAR(100)", "说明": "账户名称"},
+                                {"名称": "account_type", "类型": "VARCHAR(20)", "说明": "账户类型，如 SETTLEMENT"},
+                                {"名称": "bank_name", "类型": "VARCHAR(100)", "说明": "开户银行"},
+                                {"名称": "bank_account_no", "类型": "VARCHAR(34)", "说明": "银行账号"},
+                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "账户状态，如 ACTIVE"},
+                                {"名称": "create_time", "类型": "DATETIME", "说明": "账户开立时间"}
                             ]
                             }
                         ],
-                        "表关系": "transaction_flow.merchant_id → merchant_info | transaction_flow.institution_id → institution_info"
+                        "表关系": "transaction_flow.merchant_id → merchant_info | transaction_flow.institution_id → institution_info | transaction_flow.account_id → account_info | merchant_info.settlement_account → account_info"
                         },
                 "API工具调用": {
                     "触发条件": "当问题涉及以下特定功能时",
@@ -350,7 +363,8 @@ class IntentRecognizer:
                 "2. 判断是否涉及数据库查询（交易、机构、商户相关）",
                 "3. 如不涉及数据库，检查是否匹配API工具",
                 "4. 提取相应的参数信息",
-                "5. 按指定格式返回JSON结果"
+                "5. 针对于多工具的情况，需要判断是否涉及前后流程依赖关系，如果涉及参考示例里面的工具依赖调用示例", 
+                "6. 按指定格式返回JSON结果"
             ],
             "示例": {
                 "数据库查询示例": {
@@ -364,11 +378,22 @@ class IntentRecognizer:
                 "多工具示例": {
                     "问题": "先查汇率再计算金额",
                     "返回": {"汇率服务": {"fromCurrency": "USD", "toCurrency": "CNY", "amount": 100}, "计算器工具": {"expression": "100 * 6.5"}}
+                },
+                "工具依赖调用示例": {
+                    "问题": "请查询交易类型为PAYMENT且交易金额大于500元的最近交易金额，以此为订单金额，为商户M222222创建订单号为ORD2025005的支付订单，返回支付订单ID。",
+                    "返回": {
+                        "工具依赖调用": {
+                            "steps": [
+                                {"数据库": "SELECT transaction_amount FROM transaction_flow WHERE transaction_type = 'PAYMENT' AND transaction_amount > 500 ORDER BY transaction_time DESC LIMIT 1"},
+                                {"支付订单服务": {"merchantId": "M222222", "orderId": "ORD2025005", "param_mapping": {"amount": "step1.result.transaction_amount"}}}
+                            ]
+                        }
+                    }
                 }
             },
             "输出要求": "只返回JSON格式结果，不要添加任何解释性文字"
+            }
         }
-    }
         
         # 构建请求数据
         headers = {
