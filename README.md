@@ -6,7 +6,8 @@ python app.py
 
 测试文件：fastapi_test.py
 
-插件&意图识别：apiagent
+插件&意图识别：/apiagent
+运行 python ToolAgent.py
 
 查询数据库：NL2SQL
 
