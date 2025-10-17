@@ -250,11 +250,56 @@ class IntentRecognizer:
                         "数据库": "根据问题生成的MySQL查询SQL语句"
                     },
                     "表结构说明": {
-                        "交易流水表": ["transaction_id", "merchant_id", "institution_id", "account_id", "counterparty_id", "transaction_amount", "transaction_type", "transaction_time", "status", "remark"],
-                        "机构信息表": ["institution_id", "institution_name", "institution_type", "license_no", "legal_entity", "contact_phone", "contact_email", "status", "create_time"],
-                        "商户信息表": ["merchant_id", "merchant_name", "merchant_type", "merchant_category", "legal_person", "business_license", "settlement_account", "status", "register_time"]
-                    }
-                },
+                        "数据库表结构": [
+                            {
+                            "表名": "transaction_flow",
+                            "注释": "交易流水表",
+                            "字段": [
+                                {"名称": "transaction_id", "类型": "VARCHAR(64)", "说明": "交易流水唯一标识"},
+                                {"名称": "merchant_id", "类型": "VARCHAR(32)", "说明": "商户ID"},
+                                {"名称": "institution_id", "类型": "VARCHAR(32)", "说明": "发起机构/支付机构ID"},
+                                {"名称": "account_id", "类型": "VARCHAR(32)", "说明": "交易账户ID（付款方）"},
+                                {"名称": "counterparty_id", "类型": "VARCHAR(32)", "说明": "对手方账户ID（收款方）"},
+                                {"名称": "transaction_amount", "类型": "DECIMAL(15,2)", "说明": "交易金额（人民币）"},
+                                {"名称": "transaction_type", "类型": "VARCHAR(20)", "说明": "交易类型（PAYMENT/REFUND）"},
+                                {"名称": "transaction_time", "类型": "DATETIME", "说明": "交易发生时间"},
+                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "交易状态"},
+                                {"名称": "remark", "类型": "VARCHAR(255)", "说明": "交易备注"}
+                            ]
+                            },
+                            {
+                            "表名": "institution_info",
+                            "注释": "机构信息表",
+                            "字段": [
+                                {"名称": "institution_id", "类型": "VARCHAR(32)", "说明": "机构唯一标识"},
+                                {"名称": "institution_name", "类型": "VARCHAR(100)", "说明": "机构名称"},
+                                {"名称": "institution_type", "类型": "VARCHAR(20)", "说明": "机构类型（BANK/PAYMENT）"},
+                                {"名称": "license_no", "类型": "VARCHAR(50)", "说明": "金融许可证号"},
+                                {"名称": "legal_entity", "类型": "VARCHAR(100)", "说明": "法人代表"},
+                                {"名称": "contact_phone", "类型": "VARCHAR(20)", "说明": "联系电话"},
+                                {"名称": "contact_email", "类型": "VARCHAR(100)", "说明": "联系邮箱"},
+                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "机构状态"},
+                                {"名称": "create_time", "类型": "DATETIME", "说明": "创建时间"}
+                            ]
+                            },
+                            {
+                            "表名": "merchant_info",
+                            "注释": "商户信息表",
+                            "字段": [
+                                {"名称": "merchant_id", "类型": "VARCHAR(32)", "说明": "商户唯一标识"},
+                                {"名称": "merchant_name", "类型": "VARCHAR(100)", "说明": "商户名称"},
+                                {"名称": "merchant_type", "类型": "VARCHAR(20)", "说明": "商户类型（RETAIL/ONLINE）"},
+                                {"名称": "merchant_category", "类型": "VARCHAR(10)", "说明": "商户类别码 MCC"},
+                                {"名称": "legal_person", "类型": "VARCHAR(50)", "说明": "法人姓名"},
+                                {"名称": "business_license", "类型": "VARCHAR(50)", "说明": "营业执照号"},
+                                {"名称": "settlement_account", "类型": "VARCHAR(32)", "说明": "结算账户ID"},
+                                {"名称": "status", "类型": "VARCHAR(15)", "说明": "商户状态"},
+                                {"名称": "register_time", "类型": "DATETIME", "说明": "注册时间"}
+                            ]
+                            }
+                        ],
+                        "表关系": "transaction_flow.merchant_id → merchant_info | transaction_flow.institution_id → institution_info"
+                        },
                 "API工具调用": {
                     "触发条件": "当问题涉及以下特定功能时",
                     "工具列表": {
@@ -311,7 +356,7 @@ class IntentRecognizer:
             "示例": {
                 "数据库查询示例": {
                     "问题": "查询商户M123456在2025年8月的交易总额",
-                    "返回": {"数据库": "SELECT SUM(transaction_amount) FROM 交易流水表 WHERE merchant_id = 'M123456' AND transaction_time LIKE '2025-08%'"}
+                    "返回": {"数据库": "SELECT SUM(transaction_amount) FROM transaction_flow WHERE merchant_id = 'M123456' AND transaction_time LIKE '2025-08%'"}
                 },
                 "API工具示例": {
                     "问题": "查询户号BJ001234568在2025-08的电使用量",
@@ -324,6 +369,7 @@ class IntentRecognizer:
             },
             "输出要求": "只返回JSON格式结果，不要添加任何解释性文字"
         }
+    }
         
         # 构建请求数据
         headers = {
