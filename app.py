@@ -7,6 +7,7 @@ from typing import Optional, List, Any
 import json
 import os
 import re
+import pdfplumber
 import numpy as np
 import requests
 from langchain_huggingface import HuggingFaceEmbeddings  # 新导入，解决弃用警告
@@ -15,6 +16,7 @@ from sentence_transformers import CrossEncoder
 from langchain_community.document_loaders import UnstructuredWordDocumentLoader
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 
 # 配置日志
 logging.basicConfig(
@@ -74,25 +76,77 @@ EMBEDDINGS = None
 VECTORSTORE = None
 CROSS_ENCODER = None
 
-def build_vector_db(knowledge_dir: str, output_dir: str = VECTOR_DB_DIR, model_name: str = MODEL_NAME):
-    """构建向量库"""
+def robust_pdf_loader(file_path: str) -> List[Document]:
+    """使用 pdfplumber 加载 PDF，处理复杂布局，返回 Document 对象"""
+    documents = []
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            text = ""
+            for page in pdf.pages:
+                page_text = page.extract_text(layout=True)
+                if page_text:
+                    text += page_text + "\n"
+        if text.strip():
+            documents.append(Document(page_content=text, metadata={"source": file_path}))
+        logging.info(f"pdfplumber 成功加载: {file_path}")
+    except Exception as e:
+        logging.warning(f"pdfplumber 加载失败: {file_path}, 错误: {e}, 尝试 PyPDFLoader")
+        try:
+            loader = PyPDFLoader(file_path)
+            documents = loader.load()
+            logging.info(f"PyPDFLoader 成功加载: {file_path}")
+        except Exception as e2:
+            logging.error(f"PyPDFLoader 加载失败: {file_path}, 错误: {e2}")
+    return documents
+
+def robust_docx_loader(file_path: str) -> List[Document]:
+    """尝试多种 DOCX 加载器，返回 Document 对象"""
+    loaders = [Docx2txtLoader, UnstructuredWordDocumentLoader]
+    for Loader in loaders:
+        try:
+            loader = Loader(file_path)
+            documents = loader.load()
+            if documents:
+                logging.info(f"{Loader.__name__} 成功加载: {file_path}")
+                return documents
+        except Exception as e:
+            logging.warning(f"{Loader.__name__} 加载失败: {file_path}, 错误: {e}")
+    logging.error(f"所有 DOCX 加载器均失败: {file_path}")
+    return []
+
+def build_vector_db(knowledge_dir: str, output_dir: str = "./vector_db", model_name: str = "./bge-small-zh-v1.5"):
+    """
+    从文档目录生成 FAISS 向量库，保存为离线文件。
+    :param knowledge_dir: 文档文件夹（PDF/DOC/TXT）
+    :param output_dir: 保存路径（FAISS 索引和元数据）
+    :param model_name: 嵌入模型（中文优化）
+    """
+    # 加载文档
     documents = []
     for file in os.listdir(knowledge_dir):
         file_path = os.path.join(knowledge_dir, file)
         ext = os.path.splitext(file)[1].lower()
         try:
             if ext == ".pdf":
-                loader = PyPDFLoader(file_path)
+                docs = robust_pdf_loader(file_path)
             elif ext in [".doc", ".docx"]:
-                loader = UnstructuredWordDocumentLoader(file_path)
+                docs = robust_docx_loader(file_path)
             elif ext == ".txt":
                 loader = TextLoader(file_path, encoding="utf-8")
+                docs = loader.load()
             else:
+                logging.info(f"跳过不支持格式: {file_path}")
                 continue
-            documents.extend(loader.load())
+            documents.extend(docs)
+            logging.info(f"成功加载: {file_path}")
         except Exception as e:
-            logger.error(f"加载 {file_path} 失败: {e}")
+            logging.error(f"加载 {file_path} 失败: {e}")
     
+    if not documents:
+        raise ValueError("没有成功加载任何文档！")
+    logging.info(f"共加载 {len(documents)} 个文档")
+
+    # 分块（语义分割）
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=300,
         chunk_overlap=50,
@@ -100,16 +154,31 @@ def build_vector_db(knowledge_dir: str, output_dir: str = VECTOR_DB_DIR, model_n
         length_function=len
     )
     chunks = text_splitter.split_documents(documents)
-    
-    embeddings = HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": "cpu"}
-    )
-    
+    logging.info(f"生成 {len(chunks)} 个 chunk")
+
+    # 生成嵌入
+    try:
+        embeddings = HuggingFaceEmbeddings(
+            model_name=model_name,
+            model_kwargs={"device": "cpu"}  # 改 "cuda" 若有 GPU
+        )
+        logging.info(f"成功加载嵌入模型: {model_name}")
+    except Exception as e:
+        logging.warning(f"加载本地模型 {model_name} 失败: {e}, 尝试在线模型")
+        model_name = "./bge-small-zh-v1.5"
+        embeddings = HuggingFaceEmbeddings(
+            model_name=model_name,
+            model_kwargs={"device": "cpu"}
+        )
+        logging.info(f"成功加载在线模型: {model_name}")
+
+    # 建 FAISS 索引（cosine 相似度）
     vectorstore = FAISS.from_documents(chunks, embeddings)
+    
+    # 保存
     os.makedirs(output_dir, exist_ok=True)
     vectorstore.save_local(output_dir)
-    logger.info(f"向量库已保存到 {output_dir}")
+    logging.info(f"向量库已保存到 {output_dir}/index.faiss 和 index.pkl")
     return vectorstore, embeddings
 
 def load_and_query(query: str, top_k: int = 5):
