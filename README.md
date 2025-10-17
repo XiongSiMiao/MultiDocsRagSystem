@@ -1,7 +1,6 @@
 # MultiDocsRagSystem
 
-## 起服务（目前只有知识问答）
-python app.py
+## 起服务（知识问答模块+接口数据查询模块）
 
 * 测试文件：fastapi_test.py
 * 知识问答模块：
