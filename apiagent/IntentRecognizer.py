@@ -201,7 +201,6 @@ class IntentRecognizer:
         """识别用户意图 - 根据DeepSeek V3模型逻辑"""
         result = {}
         
-        # 1. 检查是否需要查询数据库
         database_queries = []
         for table_name, keywords in self.database_keywords.items():
             if any(keyword in question for keyword in keywords):
@@ -401,6 +400,11 @@ class IntentRecognizer:
             # 解析响应
             result = response.json()
             content = result["choices"][0]["message"]["content"]
+            # print(content)
+            prefix = '```json'
+            if content.startswith(prefix):
+                content = content[len(prefix):-3]
+            
             
             # 尝试解析JSON响应
             try:
@@ -408,6 +412,7 @@ class IntentRecognizer:
             except json.JSONDecodeError:
                 # 如果响应不是有效的JSON，使用本地识别作为备选
                 print(f"API响应不是有效JSON，使用本地识别: {content}")
+                
                 return self.recognize_intent_by_rule(question)
                 
         except requests.exceptions.RequestException as e:

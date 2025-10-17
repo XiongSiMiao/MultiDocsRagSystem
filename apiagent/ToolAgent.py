@@ -84,9 +84,10 @@ class ToolAgent:
         # 1. 意图识别
         intent_result = self.intent_recognizer.recognize_intent_by_api(question)
         
+        
         # 2. 如果是数据库查询，直接返回原问题
         if '数据库' in intent_result:
-            return f"原始问题: {question}\n识别结果: 需要查询数据库"
+            return f"{{'原始问题': {question}, '识别结果': {intent_result}}}"
         
         # 3. 如果是API工具，执行工具调用
         if intent_result:
@@ -193,12 +194,15 @@ if __name__ == "__main__":
     #     print("=" * 50)
     #     print()
 
+    # test_questions = ["请查询商户名称第二个字为'三'的商户数量。请通过数据查询方式获取结果，最终仅返回结果值",
+    # "请查询机构名称为建设银行且交易类型为REFUND的最近2笔交易的交易ID和金额，以交易时间倒序排序。请通过数据查询方式获取结果，最终仅返回结果值"]
+    
     print("\n=== 测试执行工具并生成新问题 ===")
     for question in test_questions:
         print("=" * 50)
         print(f"原始问题: {question}")
         print("-" * 50)
-        new_question = agent.execute_and_generate_new_question(question) # 分类好的
+        new_question = agent.execute_and_generate_new_question(question)
         print(new_question)
         print("=" * 50)
         print()
