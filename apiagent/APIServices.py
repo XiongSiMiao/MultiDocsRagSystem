@@ -159,7 +159,7 @@ class ExchangeRateService(APIToolClient):
         params = {
             'fromCurrency': fromCurrency.upper(),
             'toCurrency': toCurrency.upper(),
-            'amount': amount
+            'amount': float(amount)
         }
 
         if params['fromCurrency'] not in self.SUPPORTED_CURRENCIES:
@@ -354,7 +354,7 @@ class PaymentOrderService(APIToolClient):
         }
 
         if amount is not None:
-            params['amount'] = amount
+            params['amount'] = float(amount)
 
         if not self._validate_parameters(params, ['merchantId', 'orderId']):
             return {'error': '缺少必填参数: merchantId 或 orderId'}
