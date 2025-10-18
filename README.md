@@ -14,6 +14,7 @@
   python ToolAgent.py
   ```
 * 查询数据库：NL2SQL
+* 综合服务器（所有模块集合DEMO）：main.py
 * 向量库：vector_db
 * 知识文档：知识文档
 * 用到的模型：'./bge-small-zh-v1.5' & './mmarco-mMiniLMv2-L12-H384-v1' 由于大小暂时没放上来
