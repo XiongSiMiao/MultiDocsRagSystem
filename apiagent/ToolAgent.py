@@ -10,6 +10,8 @@ from mysql.connector import Error
 from APIServices import ToolService, LocalTools
 from IntentRecognizer import IntentRecognizer
 import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
 
 class ToolAgent:
     """工具代理主类 - 整合意图识别、API调用和数据库查询"""
