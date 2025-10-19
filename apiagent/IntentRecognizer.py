@@ -264,7 +264,19 @@ class IntentRecognizer:
                                 {"名称": "transaction_time", "类型": "DATETIME", "说明": "交易发生时间"},
                                 {"名称": "status", "类型": "VARCHAR(15)", "说明": "交易状态，如 SUCCESS, FAILED"},
                                 {"名称": "remark", "类型": "VARCHAR(255)", "说明": "交易备注"}
-                            ]
+                            ],
+                            "数据案例": {
+                                "transaction_id": "T00000001",
+                                "merchant_id": "M00006",
+                                "institution_id": "INST0001",
+                                "account_id": "ACC000179",
+                                "counterparty_id": "ACC000544",
+                                "transaction_amount": 42537.71,
+                                "transaction_type": "WITHDRAW",
+                                "transaction_time": "2021-02-01 12:04:01",
+                                "status": "PENDING",
+                                "remark": "交易备注0001"
+                            }
                             },
                             {
                             "表名": "institution_info",
@@ -279,7 +291,18 @@ class IntentRecognizer:
                                 {"名称": "contact_email", "类型": "VARCHAR(100)", "说明": "联系邮箱"},
                                 {"名称": "status", "类型": "VARCHAR(15)", "说明": "机构状态，如 ACTIVE"},
                                 {"名称": "create_time", "类型": "DATETIME", "说明": "创建时间"}
-                            ]
+                            ],
+                            "数据案例": {
+                                "institution_id": "INST0001",
+                                "institution_name": "机构01",
+                                "institution_type": "BANK",
+                                "license_no": "LIC000001",
+                                "legal_entity": "法人01",
+                                "contact_phone": "13800013667",
+                                "contact_email": "contact01@inst.com",
+                                "status": "ACTIVE",
+                                "create_time": "2022-10-01 17:57:59"
+                            }
                             },
                             {
                             "表名": "merchant_info",
@@ -294,7 +317,18 @@ class IntentRecognizer:
                                 {"名称": "settlement_account", "类型": "VARCHAR(32)", "说明": "结算账户ID"},
                                 {"名称": "status", "类型": "VARCHAR(15)", "说明": "商户状态，如 ACTIVE"},
                                 {"名称": "register_time", "类型": "DATETIME", "说明": "注册时间"}
-                            ]
+                            ],
+                            "数据案例": {
+                                "merchant_id": "M00001",
+                                "merchant_name": "商户01",
+                                "merchant_type": "SERVICE",
+                                "merchant_category": "5964",
+                                "legal_person": "法人01",
+                                "business_license": "BL00000001",
+                                "settlement_account": "ACC000157",
+                                "status": "INACTIVE",
+                                "register_time": "2022-08-29 15:15:46"
+                            }
                             },
                             {
                             "表名": "account_info",
@@ -307,7 +341,16 @@ class IntentRecognizer:
                                 {"名称": "bank_account_no", "类型": "VARCHAR(34)", "说明": "银行账号"},
                                 {"名称": "status", "类型": "VARCHAR(15)", "说明": "账户状态，如 ACTIVE"},
                                 {"名称": "create_time", "类型": "DATETIME", "说明": "账户开立时间"}
-                            ]
+                            ],
+                            "数据案例": {
+                                "account_id": "ACC000001",
+                                "account_name": "账户001",
+                                "account_type": "SAVING",
+                                "bank_name": "机构17",
+                                "bank_account_no": "622202884301003517",
+                                "status": "FROZEN",
+                                "create_time": "2023-07-19 16:53:45"
+                            }
                             }
                         ],
                         "表关系": "transaction_flow.merchant_id → merchant_info | transaction_flow.institution_id → institution_info | transaction_flow.account_id → account_info | merchant_info.settlement_account → account_info"
