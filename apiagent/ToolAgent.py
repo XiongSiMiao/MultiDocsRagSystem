@@ -157,6 +157,7 @@ class ToolAgent:
             return f"执行失败: {result['error']}"
         
         if tool_name == '数据库':
+            print(params)
             return f"数据库查询结果: {result.get('result', '无结果')}"
         
         # 根据不同的工具类型生成不同的描述
@@ -317,8 +318,8 @@ if __name__ == "__main__":
     # 初始化工具代理
     agent = ToolAgent(
         base_url="http://api.example.com:30000",
-        app_id="your_app_id",
-        app_key="your_app_key"
+        app_id="team27",
+        app_key="s6X6EDRWjEOvrEcnjYLBmeSmfag9dZCW"
     )
 
     # 测试各种问题
@@ -377,8 +378,10 @@ if __name__ == "__main__":
 
         "请查询交易类型为PAYMENT且交易金额大于500元的最近交易金额，以此为订单金额，为商户M222222创建订单号为ORD2025005的支付订单，返回支付订单ID"
     ]
-    test_questions =[ "请查询交易类型为PAYMENT且交易金额大于500元的最近交易金额，以此为订单金额，为商户M222222创建订单号为ORD2025005的支付订单，返回支付订单ID"
-    ]
+    # test_questions =[ 
+    #     "查询下机构名称是机构01在商户名称为商户02最近的一笔交易的金额",
+    #     "请查询交易类型为PAYMENT且交易金额小于500元的最近交易金额，以此为订单金额，为商户M222222创建订单号为ORD2025005的支付订单，返回支付订单ID"
+    # ]
     print("\n=== 测试执行工具并生成新问题 ===")
     for question in test_questions:
         print("=" * 50)
@@ -387,4 +390,5 @@ if __name__ == "__main__":
         intent_result, new_question = agent.execute_and_generate_new_question(question)
         print(new_question)
         print("=" * 50)
-        print()
+        import time
+        time.sleep(5)
